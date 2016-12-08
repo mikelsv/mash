@@ -1,2 +1,5 @@
 # mash
-My Active Shell
+My Active Shell.
+It's really.
+Devepolment start.
+Soon...
