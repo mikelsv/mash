@@ -6,3 +6,5 @@ mash.vcxproj.filters
 mash_ignore
 project.msl
 project.mfl
+CMakeLists.txt
+Makefile
