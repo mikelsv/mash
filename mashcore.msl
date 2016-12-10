@@ -1,0 +1,324 @@
+<?msl
+
+// Mash core //
+// ../mash.msl:
+// <?msl
+// include ('mash/mashcore.msl');
+// ?>
+//
+
+// Test arguments
+if(sizeof($argv) < 4){
+	print("Usage: mash.msl project action
+Actions:
+list -  files in project.
+nlist - files non project.
+alist - all files.
+add $filemask - add file from project.
+del $filemask - del file from project.
+
+togit - copy files to git repositary.
+localbuild - local build in test dir.
+#remotebuild - remote build
+
+");
+	
+	return 0;
+}
+
+$proj = $argv[2];
+$act = $argv[3];
+
+
+// Include project
+print("Project: {$proj}: {$act}.\r\n");
+
+if(!is_dir($proj)){
+        print("Error. Project folder not found.\r\n");
+	return 0;
+}
+
+if(!is_file($proj.'/project.msl')){
+        print("Error. Project project.msl not found.\r\n");
+	return 0;
+}
+
+
+// Functions
+function MashReadDir($proj, $path){
+	$rd = opendir($proj.$path);
+	$rn = "\r\n";
+	$ret = '';
+
+	if(!$rd)
+		print("Readdir fail.\r\n");
+
+	while($file = readdir($rd)){
+		if($file == '.' || $file == '..')
+			continue;
+
+		if(is_dir($proj.$path.$file)){
+			$r = MashReadDir($proj, $path.$file.'/');
+			if($r){
+			if($ret)
+				$ret .= $rn;
+				$ret .= $r;
+			}			
+		}else{
+			if($ret)
+				$ret .= $rn;
+			$ret .= $path.$file;
+		}
+
+	
+		 //print("{$file} ");
+	}
+
+	closedir($rd);
+
+
+	return $ret;	
+}
+
+
+// Init
+$project['ifiles'] = file_get_contents('mash/mash.ignore');
+$project['name'] = $proj;
+$project['path'] = $project['name'] . '/';
+
+// Msvcore
+$project['msvcore_files'] = "{$project['name']}.cpp {$project['name']}.vcxproj  {$project['name']}.vcxproj.filters Makefile CMakeLists.txt";
+
+// Git
+$project['gitpath'] = '../github.com/' . $project['name'] . '/';
+
+// Test
+$project['testpath'] = '../opensource_test/';
+
+
+// Include
+include ($proj.'/project.msl');
+
+
+// Actions:
+if($act == 'list'){
+	print("Project list: \r\n");
+	print($project['files']);
+	//print_r($project);
+	return ;
+}
+
+if($act == 'alist'){
+	print("Project list not in project: \r\n");
+	print($project['afiles']);
+	//print_r($project);
+	return ;
+}
+
+if($act == 'nlist'){
+	print("Project list not in project: \r\n");
+	$nfiles = mash_files_del($project['afiles'], $project['files']);
+	print($nfiles);
+	return ;
+}
+
+if($act == 'add'){
+	$file = $argv[4];
+
+	$nfiles = mash_files_del($project['afiles'], $project['files']);
+	$afiles = mash_files_select($nfiles, $file);
+
+	print("Add this files? (Add -y to really add this files.): \r\n");
+	print("{$afiles}\r\n");
+
+	if($argv[5] == '-y'){
+		if($project['files'])
+			$project['files'] .= "\r\n";
+		$project['files'] .= $afiles;
+		file_put_contents($project['name'] . '/' . 'project.mfl', $project['files']);
+		print("Files added OK.\r\n");
+	}
+
+	return ;
+}
+
+if($act == 'del'){
+	$file = $argv[4];
+
+	//$dfiles = mash_files_del($project['files'], $project['files']);
+	$dfiles = mash_files_select($project['files'], $file);
+
+	print("Del this files? (Add -y to really del this files.): \r\n");
+	print("{$dfiles}\r\n");
+
+	if($argv[5] == '-y'){
+		$project['files'] = mash_files_del($project['files'], $dfiles);
+
+		$project['files'] .= $afiles;
+		file_put_contents($project['name'] . '/' . 'project.mfl', $project['files']);
+		print("Files delete OK.\r\n");
+	}
+
+	return ;
+}
+
+if($act == 'togit'){
+	print("Copy files to git repositary.\r\n");
+
+	$files = explode("\r\n", $project['files']);
+	for($i = 0; $i < sizeof($files); $i ++){
+		print("Copy '" . $project['name'] . '/' . $files[$i] . "' => '" .
+			$project['gitpath'] . $files[$i] . "'\r\n" );		
+
+		$ok = copy($project['name'] . '/' . $files[$i] , $project['gitpath'] . $files[$i]);
+
+		if(!$ok){
+			print("Copy failed!\r\n");
+			return 0;
+		}
+	}
+
+	print("Copied " . sizeof($files) . " files.\r\n\r\n");
+
+	if($project['msvcore_use']){
+		print("Update files for msvcore.\r\n");
+		$files = explode(" ", $project['msvcore_files']);
+		for($i = 0; $i < sizeof($files); $i ++){
+			if(is_file($project['path'] . $files[$i])){
+				print("Update '{$project['path']}{$files[$i]}'\r\n");
+				$data = file_get_contents($project['path'] . $files[$i]);
+				$data = str_replace('../../opensource/msvcore2/', 'msvcore2/', $data);
+				$data = str_replace('../msvcore2/', 'msvcore2/', $data);
+				$data = str_replace('..\msvcore2\', 'msvcore2/', $data);
+				file_put_contents($project['gitpath'] . $files[$i], $data);			
+			}
+		}
+		print("Updated files.\r\n");
+	}
+
+}
+
+
+function mash_copy($from, $to, $files){
+	$files = explode("\r\n", $files);
+
+	for($i = 0; $i < sizeof($files); $i ++){
+		print("Copy '" . $from . $files[$i] . "' => '" .
+			$to . $files[$i] . "'\r\n" );
+
+		$ok = copy($from . $files[$i] , $to . $files[$i]);
+
+		if(!$ok){
+			$pi = pathinfo($to . $files[$i]);
+			mash_mkdir($to, $pi['dirname']);
+
+			$ok = copy($from . $files[$i] , $to . $files[$i]);
+
+			if(!$ok){
+				print("Copy failed!\r\n");
+				return 0;
+			}	
+		}
+	}
+
+	print("Copied " . sizeof($files) . " files.\r\n\r\n");
+	return 1;
+}
+
+function mash_update($from, $to, $files){
+	print("Update files for msvcore.\r\n");
+	$files = explode(" ", $files);
+	for($i = 0; $i < sizeof($files); $i ++){
+		if(is_file($from . $files[$i])){
+			print("Update '{$to}{$files[$i]}'\r\n");
+			$data = file_get_contents($from . $files[$i]);
+			$data = str_replace('../../opensource/msvcore2/', 'msvcore2/', $data);
+			$data = str_replace('../msvcore2/', 'msvcore2/', $data);
+			$data = str_replace('..\msvcore2\', 'msvcore2/', $data);
+			$ok = file_put_contents($to . $files[$i], $data);
+			//print($data); print(" OK: {$ok}; ");
+		}
+	}
+	print("Files update.\r\n");
+	return 1;
+}
+
+
+if($act == 'localbuild'){
+	print("Copy files to test dir.\r\n");
+	$ok = mash_copy($project['path'], $project['testpath'] . $project['path'], $project['files']);
+	if(!$ok){
+		print("Error!\r\n");
+		die();
+	}
+
+	if($project['msvcore_use']){
+		$ok = mash_update($project['path'], $project['testpath'] . $project['path'], $project['msvcore_files']);
+
+		mkdir($project['testpath'] . $project['path'] . 'msvcore2/');
+
+		$files = file_get_contents('msvcore2/project.mfl');
+		$ok = mash_copy('msvcore2/', $project['testpath'] . $project['path'] . 'msvcore2/', $files);
+
+
+		$ok = mash_update('msvcore2/', $project['testpath'] . $project['path'] . 'msvcore2/', 'make/msvmake-2c');
+	}
+
+	// Test make
+	$rc = 0;
+	//$res = exec("cd {$project['testpath']}{$project['path']} && make", $rc);
+	$res = exec("make -C {$project['testpath']}{$project['path']}", $rc);
+
+	print("Exec ({$rc}): {$res}");
+
+	// Test cmake
+	$res = exec("cmake -G \"Unix Makefiles\" {$project['testpath']}{$project['path']}", $rc);
+
+	print("Exec ({$rc}): {$res}");
+
+	$res = exec("make -C {$project['testpath']}{$project['path']}", $rc);
+
+	print("Exec ({$rc}): {$res}");
+
+		
+
+	// Test cmake
+	// cmake -G "Unix Makefiles"
+
+
+}
+
+if($act == 'localbuild1'){
+	print("Copy files to test dir.\r\n");
+
+	if($project['msvcore_use']){
+//		$project['files'] .= file_get_contents('msvcore2/project.mfl');
+	}
+	
+
+	$files = explode("\r\n", $project['files']);
+	for($i = 0; $i < sizeof($files); $i ++){
+		print("Copy '" . $project['path'] . $files[$i] . "' => '" .
+			$project['testpath'] . $files[$i] . "'\r\n" );
+
+		$ok = copy($project['path'] . $files[$i] , $project['testpath'] . $files[$i]);
+
+		if(!$ok){
+			$pi = pathinfo($project['testpath'] . $files[$i]);
+			mash_mkdir($project['testpath'], $pi['dirname']);
+
+			$ok = copy($project['path'] . $files[$i] , $project['testpath'] . $files[$i]);
+
+			if(!ok){
+				print("Copy failed!\r\n");
+				return 0;
+			}	
+		}
+	}
+
+	print("Copied " . sizeof($files) . " files.\r\n\r\n");
+
+		
+}
+
+?>

@@ -1,6 +1,7 @@
 MString MashFilesIgnore(VString files, VString ignore);
 MString MashFilesSelect(VString files, VString reg);
 MString MashFilesDel(VString files, VString ignore);
+int MashMkDir(VString dir, VString path);
 
 class mash_msl_fl_extfunc : public msl_fl_extfunc{
 public:
@@ -26,6 +27,11 @@ public:
 
 		if(name == "mash_files_del" && args.Sz() == 2){
 			val.val = MashFilesDel(args[0].val.val, args[1].val.val);
+			return 1;
+		}
+
+		if(name == "mash_mkdir" && args.Sz() == 2){
+			val.val = itos(MashMkDir(args[0].val.val, args[1].val.val));
 			return 1;
 		}
 
@@ -187,4 +193,29 @@ MString MashFilesDel(VString files, VString ignore){
 	}
 
 	return (VString)ls;
+}
+
+
+int MashMkDir(VString dir, VString path){
+	unsigned char *ln = path.data + dir.size() + 1, *to = path.endu(), *p = to;
+
+	//return MkDir(VString(path.data, p - path.data));
+
+	while(p >= ln){
+		if(p == to || *p =='/' || *p == '\\')
+			if(MkDir(VString(path.data, p - path.data)))
+				break;
+		p --;
+	}
+
+	p ++;
+
+	while(p <= to){
+		if(p == to || *p =='/' || *p == '\\')
+			if(!MkDir(VString(path.data, p - path.data)))
+				return 0;
+		p ++;
+	}
+
+	return 1;
 }

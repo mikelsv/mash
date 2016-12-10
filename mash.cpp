@@ -5,6 +5,7 @@
 #define USEMSV_HASH
 #define USEMSV_MSL_FL
 #define USEMSV_PCRE
+#define USEMSV_CONSOLE
 
 class msl_fl_extfunc;
 msl_fl_extfunc *msl_fl_extfunc_f = 0;
@@ -36,6 +37,8 @@ int main(int args, char* arg[]){
 	msl_fl msl;
 	int ret = 0;
 
+	msl.OutToCon();
+
 
 	//// match
 	//pcre2_match_data *match_data = pcre2_match_data_create(100, NULL);
@@ -52,7 +55,7 @@ int main(int args, char* arg[]){
 	//unsigned char buf[S1K];
 	//pcre2_get_error_message(perrcode, buf, S1K);
 	//// End test
-
+	
 	// Get args
 	ILink &link = msvcorestate.link;
 

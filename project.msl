@@ -3,7 +3,7 @@
 // Project
 //$project['name'] = 'mash';
 //$project['path'] = $project['name'] . '/';
-$project['msvcore_files'] = $project['msvcore_use'];
+$project['msvcore_use'] = 1;
 
 // Project files
 $project['files'] = file_get_contents($project['name'].'/project.mfl');
