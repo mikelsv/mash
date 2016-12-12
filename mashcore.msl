@@ -7,6 +7,107 @@
 // ?>
 //
 
+$config['tmppath'] = '../opensource_test/';
+
+function mash_tests($path, $testlist){
+	print("Tests run.\r\n");
+	$ret = 1;
+	$rc = 0;
+
+	$tests = explode(";", $testlist);
+
+	for($i = 0; $i < sizeof($tests); $i ++){
+		print("Test {$tests[$i]}:");
+		$test = explode(",", $tests[$i]);
+
+		for($j = 0; $j < sizeof($test); $j ++){
+			if(!$test[$j])
+				continue;
+			
+			print(' ' . $test[$j]);
+			if($test[$j] == 'make'){
+				$res = exec("make -C {$path}", $rc);
+			} else if($test[$j] == 'cmake'){
+				$res = exec("cmake", $rc);
+				if(!$rc)
+					$res = exec("cmake -G \"Unix Makefiles\" -H{$path} -B{$path}", $rc);
+				else
+					$rc = -1;
+			} else if($test[$j] == 'cmake_clang'){
+				$res = exec("cmake & clang -v", $rc);
+				if(!$rc)
+					$res = exec("cmake -G \"Unix Makefiles\" -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -H{$path} -B{$path}", $rc);
+				else
+					$rc = -1;
+			} else
+				$rc = 1;
+
+			if($rc == 0){
+				print("({$rc}:PASSED).");
+			}else if($rc < 0){
+				print("({$rc}:SKIP).");
+				break;
+			}else{
+				print("({$rc}:FAILED).");
+				$ret = 0;
+				break;
+			}
+		}
+		print("\r\n");
+	}
+
+	return $ret;
+}
+
+// Run as build server
+if($argv[2] == 'buildserver'){
+	print("Run as build server.\r\n");
+	mash_buildserver('mash/stormserver.conf');
+	return 0;
+}
+
+// Build server request
+if($_MASH_BUILDSERVER){
+	if(!$_FILE){
+		print("{'error':'please upload file.'}");
+		return -1;
+	}
+
+	if(!$_GET['tests']){
+		print("{'error':'please set $test value.'}");
+		return -1;
+	}
+
+	$uid = uniqid();
+	$to = $config['tmppath'] . $uid . '/';
+	mkdir($to);
+
+	$rc = 0;
+	$ret = exec("tar -xvf {$_FILE} -C {$to}", $rc);
+	if($rc){
+		print("{'error':'tar unpack failed.'}");
+		return -1;
+	}
+
+	// Tests
+	print("{'result':'");
+	$ok = mash_tests($to, $_GET['tests']);
+	print("','status':{$ok}}");
+	//if($ok)
+	//	print(",'status':1");
+	//print("}");
+
+	// Clean
+	//$ret = exec("rm {$to} -R", $rc);
+	if($rc){
+	//	print("{'error':'clean failed.'}");
+	//	return -1;
+	}	
+	
+	//print("{'status':1}");
+	return 0;
+}
+
 // Test arguments
 if(sizeof($argv) < 4){
 	print("Usage: mash.msl project action
@@ -19,8 +120,9 @@ del $filemask - del file from project.
 
 togit - copy files to git repositary.
 localbuild - local build in test dir.
-#remotebuild - remote build
+remotebuild server - remote build. Server: host:port
 
+buildserver - run as buildserver.
 ");
 	
 	return 0;
@@ -93,7 +195,9 @@ $project['msvcore_files'] = "{$project['name']}.cpp {$project['name']}.vcxproj  
 $project['gitpath'] = '../github.com/' . $project['name'] . '/';
 
 // Test
-$project['testpath'] = '../opensource_test/';
+$project['testpath'] = $config['tmppath'];
+
+$project['tests'] = 'make;cmake,make;cmake_clang,make';
 
 
 // Include
@@ -195,16 +299,15 @@ if($act == 'togit'){
 		}
 		print("Updated files.\r\n");
 	}
-
 }
 
 
 function mash_copy($from, $to, $files){
 	$files = explode("\r\n", $files);
+	print("Copy script. '" . $from . "' => '" . $to . "'\r\n" );
 
 	for($i = 0; $i < sizeof($files); $i ++){
-		print("Copy '" . $from . $files[$i] . "' => '" .
-			$to . $files[$i] . "'\r\n" );
+		print("Copy '" . $files[$i] . "'\r\n" );
 
 		$ok = copy($from . $files[$i] , $to . $files[$i]);
 
@@ -226,11 +329,11 @@ function mash_copy($from, $to, $files){
 }
 
 function mash_update($from, $to, $files){
-	print("Update files for msvcore.\r\n");
+	print("Update files for msvcore: {$to}\r\n");
 	$files = explode(" ", $files);
 	for($i = 0; $i < sizeof($files); $i ++){
 		if(is_file($from . $files[$i])){
-			print("Update '{$to}{$files[$i]}'\r\n");
+			print("Update '{$files[$i]}'\r\n");
 			$data = file_get_contents($from . $files[$i]);
 			$data = str_replace('../../opensource/msvcore2/', 'msvcore2/', $data);
 			$data = str_replace('../msvcore2/', 'msvcore2/', $data);
@@ -239,9 +342,10 @@ function mash_update($from, $to, $files){
 			//print($data); print(" OK: {$ok}; ");
 		}
 	}
-	print("Files update.\r\n");
+	print("Files update.\r\n\r\n");
 	return 1;
 }
+
 
 
 if($act == 'localbuild'){
@@ -264,61 +368,121 @@ if($act == 'localbuild'){
 		$ok = mash_update('msvcore2/', $project['testpath'] . $project['path'] . 'msvcore2/', 'make/msvmake-2c');
 	}
 
-	// Test make
-	$rc = 0;
-	//$res = exec("cd {$project['testpath']}{$project['path']} && make", $rc);
-	$res = exec("make -C {$project['testpath']}{$project['path']}", $rc);
+	
+	$ok = mash_tests($project['testpath'] . $project['path'], $project['tests']);
+	if($ok)
+		print("Tests Ok.\r\n");
+	else
+		print("Tests Failed.\r\n");
 
-	print("Exec ({$rc}): {$res}");
-
-	// Test cmake
-	$res = exec("cmake -G \"Unix Makefiles\" {$project['testpath']}{$project['path']}", $rc);
-
-	print("Exec ({$rc}): {$res}");
-
-	$res = exec("make -C {$project['testpath']}{$project['path']}", $rc);
-
-	print("Exec ({$rc}): {$res}");
-
-		
-
-	// Test cmake
-	// cmake -G "Unix Makefiles"
-
-
+	return !$ok;
 }
 
-if($act == 'localbuild1'){
-	print("Copy files to test dir.\r\n");
+function mash_tobuild($from, $to, $msvcopy = 0){
+	global $project;
+
+	$ok = mash_copy($from, $to, $project['files']);
+		if(!$ok)
+			return 0;
 
 	if($project['msvcore_use']){
-//		$project['files'] .= file_get_contents('msvcore2/project.mfl');
-	}
+		$ok = mash_update($from, $to, $project['msvcore_files']);
+		if(!$ok)
+			return 0;
+
+		if($msvcopy){
+			mkdir($to . 'msvcore2/');
 	
-
-	$files = explode("\r\n", $project['files']);
-	for($i = 0; $i < sizeof($files); $i ++){
-		print("Copy '" . $project['path'] . $files[$i] . "' => '" .
-			$project['testpath'] . $files[$i] . "'\r\n" );
-
-		$ok = copy($project['path'] . $files[$i] , $project['testpath'] . $files[$i]);
-
-		if(!$ok){
-			$pi = pathinfo($project['testpath'] . $files[$i]);
-			mash_mkdir($project['testpath'], $pi['dirname']);
-
-			$ok = copy($project['path'] . $files[$i] , $project['testpath'] . $files[$i]);
-
-			if(!ok){
-				print("Copy failed!\r\n");
+			$files = file_get_contents('msvcore2/project.mfl');
+			$ok = mash_copy('msvcore2/', $to . 'msvcore2/', $files);
+			if(!$ok)
 				return 0;
-			}	
+
+			$ok = mash_update('msvcore2/', $to . 'msvcore2/', 'make/msvmake-2c');
+			if(!$ok)
+				return 0;
 		}
 	}
 
-	print("Copied " . sizeof($files) . " files.\r\n\r\n");
-
-		
+	return 1;
 }
+
+if($act == 'remotebuild'){
+	print("== Remote build ==\r\n");
+	$result = 1;
+
+	$serv = $argv[4];
+	if(!$serv){
+		print("Error! Please set server.\r\n");
+		return -1;
+	}
+
+	print("= Copy =\r\n");
+
+	$uid = uniqid();
+	$to = $project['testpath'] . $uid . '/';
+	mkdir($to);
+
+	$ok = mash_tobuild($project['path'], $to, 1);
+	if(!$ok){
+		print("Error! Exit.\r\n");
+		return -1;
+	}
+
+	// Archivate
+	print("= Archivate =\r\n");
+	$rc = 0;
+	$ret = exec("tar -cvf {$project['testpath']}/{$uid}.tar -C {$to} ./ --mode=777", $rc);
+	if($rc){
+		print("Error! Archivation failed.\r\n");	
+		return -1;
+	}
+
+	// Build server request
+	print("= Build on remote server =\r\n");
+	$req['request'] = $serv . "?proj={$project['name']}&tests={$project['tests']}";
+	$req['sendfile'] = "{$project['testpath']}/{$uid}.tar";
+	$ret = mash_httprequest($req);
+
+	if($ret['status'] != '1'){
+		print("Error: {$ret['error']}.\r\n");
+		$result = 0;
+	} else{
+		$ret = json_decode($ret['result']);
+		if($ret['status'] != '1'){
+			print("Error: {$ret['result']}\r\n");
+			$result = 0;
+		} else{
+			print("Result: {$ret['result']}.\r\n");
+		}
+	}
+
+	// Clean
+	print("= Clean =\r\n");
+	$ret = exec("rm {$to} -R", $rc);
+	if($rc){
+		print("Error! Clean failed.\r\n");	
+		return -1;
+	}	
+	$ret = exec("rm {$project['testpath']}/{$uid}.tar", $rc);
+	if($rc){
+		print("Error! Clean failed.\r\n");	
+		return -1;
+	}	
+	
+	if(!$result){
+		print("Errors found!");
+		return -1;
+	}
+
+	print("== Remote Build == PASSED ==\r\n");
+	
+	return 0;        	
+}
+
+//$rc = 0;
+//$res = exec("cmake", $rc);
+//print("EXEC {$rc} {$res}");
+
 
 ?>

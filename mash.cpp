@@ -6,6 +6,10 @@
 #define USEMSV_MSL_FL
 #define USEMSV_PCRE
 #define USEMSV_CONSOLE
+#define USEMSV_HTTP
+#define USEMSV_XDATACONT
+
+#define USEMSV_STORMSERVER
 
 class msl_fl_extfunc;
 msl_fl_extfunc *msl_fl_extfunc_f = 0;
@@ -19,6 +23,7 @@ Versions PROJECTVER[]={
 	"0.0.0.1", "08.12.2016 14:39"
 };
 
+#include "server.h"
 #include "mash.h"
 
 class MashPoint{
@@ -68,7 +73,9 @@ int main(int args, char* arg[]){
 	}
 
 	ILink mlink(path);
-	chdir(SString(mlink.GetProtoDomainPath()));
+
+	if(mlink.GetProtoDomainPath())
+		chdir(SString(mlink.GetProtoDomainPath()));
 
 	// Args
 	msl_value *val = msl.SetValue("argv", "");

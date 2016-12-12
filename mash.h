@@ -2,6 +2,7 @@ MString MashFilesIgnore(VString files, VString ignore);
 MString MashFilesSelect(VString files, VString reg);
 MString MashFilesDel(VString files, VString ignore);
 int MashMkDir(VString dir, VString path);
+void HttpRequest(msl_value &val, msl_value &rval);
 
 class mash_msl_fl_extfunc : public msl_fl_extfunc{
 public:
@@ -32,6 +33,16 @@ public:
 
 		if(name == "mash_mkdir" && args.Sz() == 2){
 			val.val = itos(MashMkDir(args[0].val.val, args[1].val.val));
+			return 1;
+		}
+
+		if(name == "mash_buildserver" && args.Sz() == 1){
+			MashTestServer(args[0].val.val);
+			return 1;
+		}
+
+		if(name == "mash_httprequest" && args.Sz() == 1){
+			HttpRequest(args[0].val, val);
 			return 1;
 		}
 
@@ -163,7 +174,6 @@ MString MashFilesSelect(VString files, VString reg){
 }
 
 
-
 MString MashFilesDel(VString files, VString ignore){
 	IList <VString> list;
 	
@@ -218,4 +228,43 @@ int MashMkDir(VString dir, VString path){
 	}
 
 	return 1;
+}
+
+
+void HttpRequest(msl_value &val, msl_value &rval){
+	GetHttp gp;
+	TString fdata;
+
+	// request - request.
+	// sendfile - file for send.
+	// return recv data.
+
+	if(!val["request"]){
+		rval.Set("error", "request is empty");
+		rval.Set("status", "0");
+		return ;
+	}
+
+	if(val["sendfile"]){
+		gp.SetPost(fdata = LoadFile(val["sendfile"]));
+	}
+
+	MString req = val["request"];
+	if(req.str(7) != "http://" && req.str(8) != "https://"){
+		req.Add("http://", req);
+	}
+
+	gp.SetTimeout(300);
+
+	int r = gp.Request(req);
+	if(!r){
+		rval.Set("error", "request failed");
+		rval.Set("status", "0");
+		return ;
+	}
+
+	rval.Set("status", "1");
+	rval.Set("result", gp.GetData());
+
+	return ;
 }
